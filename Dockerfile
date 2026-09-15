@@ -1,7 +1,6 @@
-# RunPod Serverless GPU worker for moncusoai/wvl81
 FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
-WORKDIR /app
+WORKDIR /
 
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
@@ -17,11 +16,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
         sentencepiece \
         protobuf
 
-COPY handler.py /app/handler.py
+COPY rp_handler.py /
 
-ENV MODEL_PATH=/runpod-volume/models/moncusoai/wvl81
+ENV MODEL_PATH=/runpod-volume/myapp/models/moncusoai/wvl81
 ENV PRELOAD_MODEL=1
 ENV HF_HOME=/runpod-volume/hf-cache
 ENV TRANSFORMERS_CACHE=/runpod-volume/hf-cache
 
-CMD ["python", "-u", "handler.py"]
+CMD ["python3", "-u", "rp_handler.py"]
