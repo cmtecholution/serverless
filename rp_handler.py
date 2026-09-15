@@ -1,16 +1,17 @@
-# =============================================================================
-# RunPod Serverless worker – wvl81 (Qwen3-VL) streaming inference
-# =============================================================================
-# Network volume path on Serverless is /runpod-volume (same data as /workspace on pods)
-# =============================================================================
-
 import os
+import sys
 import threading
 from typing import Dict, Generator, List
 
+print(f"Python: {sys.executable}")
+print(f"sys.path[0:3]={sys.path[:3]}")
+
 import runpod
 import torch
+import torchvision  # required by Qwen3VLVideoProcessor
 from transformers import AutoProcessor, Qwen3VLForConditionalGeneration, TextIteratorStreamer
+
+print(f"torch={torch.__version__} torchvision={torchvision.__version__} cuda={torch.cuda.is_available()}")
 
 MODEL_PATH = os.environ.get(
     "MODEL_PATH",
@@ -99,16 +100,15 @@ def generate_tokens(job_input: dict) -> Generator[dict, None, None]:
 
 
 def handler(event):
-    """Streaming handler – each yield is a token chunk for /stream."""
+    print("Worker Start")
     job_input = event.get("input") or {}
-    yield from generate_tokens(job_input)
+    try:
+        yield from generate_tokens(job_input)
+    except Exception as e:
+        print(f"Handler error: {e}")
+        yield {"error": str(e)}
+        raise
 
 
 if __name__ == "__main__":
-    if os.environ.get("PRELOAD_MODEL", "1") == "1":
-        try:
-            load_model()
-        except Exception as e:
-            print(f"Preload skipped/failed (will retry on first job): {e}")
-
-    runpod.serverless.start({'handler': handler })
+    runpod.serverless.start({"handler": handler})
