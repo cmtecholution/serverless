@@ -111,4 +111,4 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Preload skipped/failed (will retry on first job): {e}")
 
-    runpod.serverless.start({"handler": handler, "return_aggregate_stream": True})
+    runpod.serverless.start({'handler': handler })
