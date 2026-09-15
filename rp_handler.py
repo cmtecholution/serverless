@@ -1,11 +1,7 @@
 # =============================================================================
 # RunPod Serverless worker – wvl81 (Qwen3-VL) streaming inference
 # =============================================================================
-# Deploy this folder as a custom worker. Mount a Network Volume that contains:
-#   /runpod-volume/models/moncusoai/wvl81/   (or set MODEL_PATH)
-#
-# Expected env on the endpoint:
-#   MODEL_PATH=/runpod-volume/models/moncusoai/wvl81
+# Network volume path on Serverless is /runpod-volume (same data as /workspace on pods)
 # =============================================================================
 
 import os
@@ -18,7 +14,7 @@ from transformers import AutoProcessor, Qwen3VLForConditionalGeneration, TextIte
 
 MODEL_PATH = os.environ.get(
     "MODEL_PATH",
-    "/runpod-volume/models/moncusoai/wvl81",
+    "/runpod-volume/myapp/models/moncusoai/wvl81",
 )
 
 _model = None
@@ -102,22 +98,17 @@ def generate_tokens(job_input: dict) -> Generator[dict, None, None]:
         thread.join(timeout=3600)
 
 
-def handler(job):
+def handler(event):
     """Streaming handler – each yield is a token chunk for /stream."""
-    job_input = job.get("input") or {}
+    job_input = event.get("input") or {}
     yield from generate_tokens(job_input)
 
 
-# Load at worker start when GPU is already attached (faster first request)
-if os.environ.get("PRELOAD_MODEL", "1") == "1":
-    try:
-        load_model()
-    except Exception as e:
-        print(f"Preload skipped/failed (will retry on first job): {e}")
+if __name__ == "__main__":
+    if os.environ.get("PRELOAD_MODEL", "1") == "1":
+        try:
+            load_model()
+        except Exception as e:
+            print(f"Preload skipped/failed (will retry on first job): {e}")
 
-runpod.serverless.start(
-    {
-        "handler": handler,
-        "return_aggregate_stream": True,
-    }
-)
+    runpod.serverless.start({"handler": handler, "return_aggregate_stream": True})
