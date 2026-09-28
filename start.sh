@@ -7,9 +7,21 @@ set -euo pipefail
 PY="/runpod-volume/uv-python/cpython-3.12.14-linux-x86_64-gnu/bin/python3.12"
 SITE="/runpod-volume/venvs/moncusoai/lib/python3.12/site-packages"
 
+BAKED_MODEL="${BAKED_MODEL_PATH:-/models/wvl81}"
 SRC_MODEL="${MODEL_PATH:-/runpod-volume/myapp/models/moncusoai/wvl81}"
 LOCAL_MODEL="${LOCAL_MODEL_PATH:-/local/models/wvl81}"
 STAGE_MODEL="${STAGE_MODEL:-1}"
+
+model_looks_complete() {
+  local dir="$1"
+  [[ -d "$dir" ]] || return 1
+  [[ -f "$dir/model.safetensors.index.json" ]] || return 1
+  [[ -f "$dir/config.json" ]] || return 1
+  local n
+  n="$(ls -1 "$dir"/model-*.safetensors 2>/dev/null | wc -l | tr -d ' ')"
+  [[ "$n" -ge 1 ]] || return 1
+  return 0
+}
 
 if [[ ! -x "$PY" ]]; then
   echo "FATAL: volume Python not found at $PY" >&2
@@ -27,6 +39,22 @@ export VIRTUAL_ENV="/runpod-volume/venvs/moncusoai"
 export PYTHONPATH="$SITE${PYTHONPATH:+:$PYTHONPATH}"
 export PYTHONNOUSERSITE=1
 export PRELOAD_MODEL="${PRELOAD_MODEL:-1}"
+
+# Prefer weights baked into the image (NVMe). No NFS copy needed.
+if model_looks_complete "$BAKED_MODEL"; then
+  echo "Using baked-in weights at $BAKED_MODEL (skipping volume stage)"
+  export MODEL_PATH="$BAKED_MODEL"
+  export LOCAL_MODEL_PATH="$BAKED_MODEL"
+  export MODEL_LOAD_PATH="$BAKED_MODEL"
+  export STAGE_MODEL=0
+  HANDLER="${HANDLER_PATH:-/runpod-volume/myapp/serverless/rp_handler.py}"
+  [[ -f "$HANDLER" ]] || HANDLER=/rp_handler.py
+  echo "Starting worker: $PY  PRELOAD_MODEL=$PRELOAD_MODEL  MODEL_LOAD_PATH=$MODEL_LOAD_PATH  HANDLER=$HANDLER"
+  exec "$PY" -u "$HANDLER"
+fi
+
+echo "No complete baked model at $BAKED_MODEL — falling back to volume staging"
+
 export STAGE_MODEL
 export MODEL_PATH="$SRC_MODEL"
 export LOCAL_MODEL_PATH="$LOCAL_MODEL"
@@ -118,11 +146,12 @@ stage_model_to_local() {
 
 if [[ "$STAGE_MODEL" == "1" || "$STAGE_MODEL" == "true" ]]; then
   stage_model_to_local
-  # Handler loads from local path when present
   export MODEL_LOAD_PATH="$LOCAL_MODEL"
 else
   export MODEL_LOAD_PATH="$SRC_MODEL"
 fi
 
-echo "Starting worker: $PY  PRELOAD_MODEL=$PRELOAD_MODEL  MODEL_LOAD_PATH=$MODEL_LOAD_PATH"
-exec "$PY" -u /rp_handler.py
+HANDLER="${HANDLER_PATH:-/runpod-volume/myapp/serverless/rp_handler.py}"
+[[ -f "$HANDLER" ]] || HANDLER=/rp_handler.py
+echo "Starting worker: $PY  PRELOAD_MODEL=$PRELOAD_MODEL  MODEL_LOAD_PATH=$MODEL_LOAD_PATH  HANDLER=$HANDLER"
+exec "$PY" -u "$HANDLER"
