@@ -222,6 +222,7 @@ def handler(event):
         yield {"error": str(e)}
 
 
+# Start the Serverless function when the script is run (RunPod Hub detects this).
 if __name__ == "__main__":
     print(
         f"Boot config: MODEL_LOAD_PATH={MODEL_PATH} "
@@ -241,4 +242,5 @@ if __name__ == "__main__":
             flush=True,
         )
 
+    # Required by RunPod queue workers / Hub repo scanner:
     runpod.serverless.start({"handler": handler, "return_aggregate_stream": True})
